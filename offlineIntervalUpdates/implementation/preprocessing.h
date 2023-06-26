@@ -101,36 +101,40 @@ private:
     }
 
     // this function shall return the index of the last interval which is part of the solution and ends before the queryTime
-    int sol_lowerBound(int solFrom, int queryTime) {
-        int from = pre_traversal_index[solFrom], to = pre_traversal_index[hpa[solFrom]];
-        while(!forward_edges[pre_traverse[to]].empty() and e_intervals[forward_edges[pre_traverse[to]].front()].second < queryTime) {
+    // as well as the size of the set from sol to the given index
+    pair<int, int> sol_lowerBound(int solFrom, int queryTime) {
+        int from = pre_traversal_index[solFrom], to = pre_traversal_index[hpa[solFrom]], size = 0;
+        while (!forward_edges[pre_traverse[to]].empty() and
+               e_intervals[forward_edges[pre_traverse[to]].front()].second < queryTime) {
+            size += (to - from + 1);
             from = pre_traversal_index[forward_edges[pre_traverse[to]].front()];
             to = pre_traversal_index[hpa[forward_edges[pre_traverse[to]].front()]];
         }
         int beg = from, end = to, mid;
-        while(beg<=end) {
-            mid = (beg+end)/2;
-            if(e_intervals[pre_traverse[mid]].second >= queryTime)
-                end = mid-1;
-            else if(mid==end or e_intervals[pre_traverse[mid+1]].second >= queryTime)
-                return pre_traverse[mid];
+        while (beg <= end) {
+            mid = (beg + end) / 2;
+            if (e_intervals[pre_traverse[mid]].second >= queryTime)
+                end = mid - 1;
+            else if (mid == end or e_intervals[pre_traverse[mid + 1]].second >= queryTime)
+                return make_pair(pre_traverse[mid], size + mid - from + 1);
             else
-                beg = mid+1;
+                beg = mid + 1;
         }
-        return -1;
+        size += (to - from + 1);
+        return make_pair(-1, size);
     }
 
     // this function shall return the index of the interval which starts after the queryTime and ends first
     int upperBound(int queryTime) {
-        int beg = 0, end = n-1, mid;
-        while(beg<=end) {
-            mid = (beg+end)/2;
-            if(s_intervals[mid].first <= queryTime)
-                beg = mid+1;
-            else if(mid==beg or s_intervals[mid-1].first <= queryTime)
-                return st.fetch(mid+1, n).second;
+        int beg = 0, end = n - 1, mid;
+        while (beg <= end) {
+            mid = (beg + end) / 2;
+            if (s_intervals[mid].first <= queryTime)
+                beg = mid + 1;
+            else if (mid == beg or s_intervals[mid - 1].first <= queryTime)
+                return st.fetch(mid + 1, n).second;
             else
-                end = mid-1;
+                end = mid - 1;
         }
         return -1;
     }
@@ -161,7 +165,7 @@ public:
             else
                 return a.first < b.first;
         });
-        for(int i = 0; i<n; i++)
+        for (int i = 0; i < n; i++)
             si[i] = make_pair(e_intervals[i], i);
 
         // creating the forest(edges) alongside storing the subtree sizes and the heavy children of each node
@@ -193,12 +197,52 @@ public:
         // minimum ending time over the intervals
         sort(s_intervals.begin(), s_intervals.end());
         sort(si.begin(), si.end());
-        st = seg_tree<pair<pair<int, int>, int>>(n, si, [](pair<pair<int, int>, int> a, pair<pair<int, int>, int> b){
-            if(a.first.second<b.first.second or (a.first.second==b.first.second and a.first.first>b.first.first))
+        st = seg_tree<pair<pair<int, int>, int>>(n, si, [](pair<pair<int, int>, int> a, pair<pair<int, int>, int> b) {
+            if (a.first.second < b.first.second or (a.first.second == b.first.second and a.first.first > b.first.first))
                 return a;
             else
                 return b;
         });
     }
 
+    //function to add f new intervals and retrieve the new best answer
+    int add(int f, vii &n_intervals) {
+        int dynamic_answer_start_time = 1, dynamic_answer_from = 0, final_answer = 0;
+        sort(n_intervals.begin(), n_intervals.end(), [](pair<int, int> a, pair<int, int> b) {
+            if (a.second < b.second)
+                return true;
+            else if (b.second < a.second)
+                return false;
+            else
+                return a.first < b.first;
+        });
+        for(int i = 0; i<f; i++) {
+            if(n_intervals[i].first >= dynamic_answer_start_time) {
+                if(dynamic_answer_from == -1) {
+                    //interval added
+                    dynamic_answer_start_time = n_intervals[i].second + 1;
+                    final_answer++;
+                }
+                else {
+                    auto slb = sol_lowerBound(dynamic_answer_from, n_intervals[i].first);
+                    int prev_ind = slb.first, n_ans = slb.second;
+                    if (forward_edges[prev_ind].empty() or
+                        e_intervals[forward_edges[prev_ind].front()].second > n_intervals[i].second) {
+                        //the interval in question is being added to the solution
+                        dynamic_answer_from = upperBound(n_intervals[i].second);
+                        dynamic_answer_start_time = n_intervals[i].second + 1;
+                        final_answer += n_ans + 1;
+                    }
+                }
+            }
+        }
+        if(dynamic_answer_from != -1)
+            final_answer += sol_lowerBound(dynamic_answer_from, INFINITY).second;
+        return final_answer;
+    }
 };
+
+/*
+* Cases to think about:
+ * When the ending time of the current interval in solution is the same as the ending time of the new interval which is being considered to enter into the solution.
+*/
