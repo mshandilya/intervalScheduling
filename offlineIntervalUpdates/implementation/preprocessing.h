@@ -205,8 +205,8 @@ public:
         });
     }
 
-    //function to add f new intervals and retrieve the new best answer
-    int add(int f, vii &n_intervals) {
+    // function to add f new intervals and retrieve the new best answer
+    int add(int f, vii& n_intervals) {
         int dynamic_answer_start_time = 1, dynamic_answer_from = 0, final_answer = 0;
         sort(n_intervals.begin(), n_intervals.end(), [](pair<int, int> a, pair<int, int> b) {
             if (a.second < b.second)
@@ -239,6 +239,19 @@ public:
         if(dynamic_answer_from != -1)
             final_answer += sol_lowerBound(dynamic_answer_from, INFINITY).second;
         return final_answer;
+    }
+
+    // function to delete f original intervals
+    void del(int f, vii& n_indices) {
+        /*
+         * Cases to think about:
+         *  The interval to be deleted is not part of the solution.
+         *  The interval to be deleted was part of the original / new solution.
+         *      Then, the query we need to perform is the upperBound query but with the interval in question removed.
+         *      Thankfully, we use a segment tree to perform the range queries and therefore, we can make point updates for the same.
+         *      However, at the end of deleting all intervals in question, we must move on to reverse those point updates in the segment tree.
+         *
+         */
     }
 };
 
