@@ -82,7 +82,7 @@ class preprocess {
 private:
     int n;
     vii s_intervals, e_intervals;
-    vi pre_traverse, pre_traversal_index, root_indices, hpa;
+    vi pre_traverse, pre_traversal_index, root_indices, hpa, s_indices;
     adjList forward_edges;
     seg_tree<pair<pair<int, int>, int>> st;
 
@@ -146,6 +146,7 @@ public:
         n = size;
         s_intervals = intervals;
         e_intervals = intervals;
+        s_indices.resize(n);
         pre_traversal_index.resize(n);
         hpa.resize(n);
         forward_edges.resize(n);
@@ -197,6 +198,8 @@ public:
         // minimum ending time over the intervals
         sort(s_intervals.begin(), s_intervals.end());
         sort(si.begin(), si.end());
+        for(int i = 0; i<n; i++)
+            s_indices[si[i].second] = i;
         st = seg_tree<pair<pair<int, int>, int>>(n, si, [](pair<pair<int, int>, int> a, pair<pair<int, int>, int> b) {
             if (a.first.second < b.first.second or (a.first.second == b.first.second and a.first.first > b.first.first))
                 return a;
@@ -226,8 +229,9 @@ public:
                 else {
                     auto slb = sol_lowerBound(dynamic_answer_from, n_intervals[i].first);
                     int prev_ind = slb.first, n_ans = slb.second;
-                    if (forward_edges[prev_ind].empty() or
-                        e_intervals[forward_edges[prev_ind].front()].second > n_intervals[i].second) {
+                    if ((prev_ind==-1 and n_intervals[i].second < e_intervals[dynamic_answer_from].second) or
+                    (prev_ind>=0 and (forward_edges[prev_ind].empty() or
+                    e_intervals[forward_edges[prev_ind].front()].second > n_intervals[i].second))) {
                         //the interval in question is being added to the solution
                         dynamic_answer_from = upperBound(n_intervals[i].second);
                         dynamic_answer_start_time = n_intervals[i].second + 1;
@@ -242,7 +246,7 @@ public:
     }
 
     // function to delete f original intervals
-    void del(int f, vii& n_indices) {
+    int del(int f, vi& n_indices) {
         /*
          * Cases to think about:
          *  The interval to be deleted is not part of the solution.
@@ -250,9 +254,88 @@ public:
          *      Then, the query we need to perform is the upperBound query but with the interval in question removed.
          *      Thankfully, we use a segment tree to perform the range queries and therefore, we can make point updates for the same.
          *      However, at the end of deleting all intervals in question, we must move on to reverse those point updates in the segment tree.
-         *
          */
+        // in order to delete an entry from the segment tree, we simply point update with the dummy variable {{s_i, INFINITY}, i}
+        // every deletion would be O(log n) and re-insertions are also O(log n)
+        int dynamic_answer_start_time = 1, dynamic_answer_from = 0, final_answer = 0;
+        sort(n_indices.begin(), n_indices.end());
+        for(int i = 0; i<f; i++) {
+            if(e_intervals[n_indices[i]].first >= dynamic_answer_start_time) {
+                auto slb = sol_lowerBound(dynamic_answer_from, e_intervals[n_indices[i]].first);
+                int prev_ind = slb.first, n_ans = slb.second;
+                if (prev_ind != -1)
+                    dynamic_answer_start_time = e_intervals[prev_ind].second + 1;
+                st.update(s_indices[n_indices[i]], make_pair(make_pair(e_intervals[n_indices[i]].first, INFINITY), n_indices[i]));
+                dynamic_answer_from = upperBound(dynamic_answer_start_time - 1);
+                final_answer += n_ans;
+            }
+        }
+        if(dynamic_answer_from != -1 and st.fetch(s_indices[dynamic_answer_from], s_indices[dynamic_answer_from]).first.second != INFINITY)
+            final_answer += sol_lowerBound(dynamic_answer_from, INFINITY).second;
+        for(int i = 0; i<=f; i++)
+            st.update(s_indices[n_indices[i]], make_pair(e_intervals[n_indices[i]], n_indices[i]));
+        return final_answer;
     }
+
+    int gen_query(int f1, int f2, vii& n_intervals, vi& n_indices) {
+        //to do
+        int f = f1+f2, dynamic_answer_from = 0, dynamic_answer_start_time = 1, final_answer = 0;
+        vc<pair<pair<int, int>, int>> n_int(f);
+        for(int i = 0; i<f1; i++)
+            n_int[i] = make_pair(n_intervals[i], -1);
+        for(int i = 0; i<f2; i++)
+            n_int[f1+i] = make_pair(e_intervals[n_indices[i]], n_indices[i]);
+        sort(n_int.begin(), n_int.end(), [](pair<pair<int, int>, int> a, pair<pair<int, int>, int> b){
+            if (a.first.second < b.first.second)
+                return true;
+            else if (b.first.second < a.first.second)
+                return false;
+            else
+                return a.first.first < b.first.first;
+        });
+        for(int i = 0; i<f; i++) {
+            if(n_int[i].second == -1) {
+                //said interval needs to be added
+                if(n_int[i].first.first >= dynamic_answer_start_time) {
+                    if (dynamic_answer_from == -1) {
+                        //interval added
+                        dynamic_answer_start_time = n_int[i].first.second + 1;
+                        final_answer++;
+                    } else {
+                        auto slb = sol_lowerBound(dynamic_answer_from, n_int[i].first.first);
+                        int prev_ind = slb.first, n_ans = slb.second;
+                        if ((prev_ind == -1 and n_int[i].first.second < e_intervals[dynamic_answer_from].second) or
+                            (prev_ind >= 0 and (forward_edges[prev_ind].empty() or
+                                                e_intervals[forward_edges[prev_ind].front()].second >
+                                                n_int[i].first.second))) {
+                            //the interval in question is being added to the solution
+                            dynamic_answer_from = upperBound(n_int[i].first.second);
+                            dynamic_answer_start_time = n_int[i].first.second + 1;
+                            final_answer += n_ans + 1;
+                        }
+                    }
+                }
+            }
+            else {
+                //said interval needs to be deleted
+                if(e_intervals[n_int[i].second].first >= dynamic_answer_start_time) {
+                    auto slb = sol_lowerBound(dynamic_answer_from, e_intervals[n_int[i].second].first);
+                    int prev_ind = slb.first, n_ans = slb.second;
+                    if (prev_ind != -1)
+                        dynamic_answer_start_time = e_intervals[prev_ind].second + 1;
+                    st.update(s_indices[n_int[i].second], make_pair(make_pair(e_intervals[n_int[i].second].first, INFINITY), n_int[i].second));
+                    dynamic_answer_from = upperBound(dynamic_answer_start_time - 1);
+                    final_answer += n_ans;
+                }
+            }
+        }
+        if(dynamic_answer_from != -1 and st.fetch(s_indices[dynamic_answer_from], s_indices[dynamic_answer_from]).first.second != INFINITY)
+            final_answer += sol_lowerBound(dynamic_answer_from, INFINITY).second;
+        for(int i = 0; i<=f2; i++)
+            st.update(s_indices[n_indices[i]], make_pair(e_intervals[n_indices[i]], n_indices[i]));
+        return final_answer;
+    }
+
 };
 
 /*
